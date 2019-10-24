@@ -1,6 +1,6 @@
 ---
 title: "Web Scraping"
-author: "Matthew Ross"
+author: "Matthew Ross, Homework Submission by Katie Willi"
 date: "10/20/2019"
 output: html_document
 ---
@@ -10,7 +10,7 @@ library(rvest)
 library(tidyverse)
 library(lubridate)
 library(readxl)
-
+library(pdftools)
 ```
 
 
@@ -48,7 +48,6 @@ links <- webpage %>%
   .[grepl('24 Hour',.)] %>%
   html_attr('href')
 
-
 ```
 
 ## Data Download
@@ -66,18 +65,25 @@ dataset <- splits[,8]
 #generate a file list for where the data goes
 file_names <- paste0('data/',dataset)
 
-# for(i in 1:length(file_names)){
-#   download.file(links[i],destfile=file_names[i])
-# }
+ #for(i in 1:length(file_names)){
+   #download.file(links[i],destfile=file_names[i])
+ #}
+
+downloaded <- file.exists(file_names)
+
+evaluate <- !all(downloaded)
+
+evaluate
 
 ```
 
 ### Download data in a map
 
 ```{r}
-
 #Map version of the same forloop (downloading 4 files)
-map2(links,file_names,download.file)
+if(evaluate==TRUE){
+  map2(links, file_names, download.file)
+}else{print('data already downloaded')}
 
 ```
 
@@ -149,6 +155,17 @@ the `SASP forcing` and `SBSP_forcing` meteoroligical datasets.
 
 ```{r}
 
+site_url <- 'https://snowstudies.org/archived-data/'
+
+
+urls <- read_html(site_url)
+
+links <- urls %>%
+  html_nodes('a') %>%
+  .[grepl('forcing',.)] %>%
+  html_attr('href')
+
+links
 ```
 
 ## Download the meteorological data
@@ -159,6 +176,17 @@ You can use a for loop or a map function.
 
 ```{r}
 
+splits <- str_split_fixed(links,'/',5)
+
+dataset2 <- splits[,5]
+
+filez <- paste0('data/',dataset2)
+
+ for(i in 1:length(filez)){
+   download.file(links[i],destfile=filez[i])
+ }
+
+
 ```
 
 ## Read in the data
@@ -167,6 +195,28 @@ Write a custom function to read in the data and append a site
 column to the data. 
 
 ```{r}
+headers <- pdf_text('https://snowstudies.org/data/Serially-Complete-Metadata-text08.pdf') %>%
+  readr::read_lines(.) %>%
+  trimws(.) %>%
+  str_split_fixed(., '\\.',2) %>%
+  .[,2] %>%
+  .[1:26]
+
+forcing_filez <- filez 
+  
+
+datas <- read_delim('data/Serially-Complete-SBSP-text07.txt', col_names=headers,  delim=" ")
+
+q_binder <- function(dataset = datas,
+                     name = "Senator Beck"){
+  df <- mutate(dataset, site = name)
+  return(df)
+}
+
+q_binder(dataset = datas,
+         name = "Senator Beck") %>%
+  slice(1)
+
 
 ```
 
@@ -174,6 +224,17 @@ column to the data.
 Use the `map` function to read in both meteorological files.
 
 ```{r}
+forcing_files <- filez
+
+our_forcing_reader <- function(filez){
+  name = str_split_fixed(filez,'-',3)[,3]
+  df <- read_delim(filez, col_names=headers,  delim=" ") %>%
+    mutate(site = name)
+}
+
+forcing_data_full <- map_dfr(forcing_files,our_forcing_reader)
+
+#summary(forcing_data_full)
 
 ```
 
